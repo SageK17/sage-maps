@@ -210,24 +210,36 @@ export function RoutesOverlay() {
           </div>
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '0 14px' }}>
-            {loading
-              ? showSkeleton && [0, 1, 2].map((i) => <div key={i} className="sg-skeleton" />)
-              : routes.map((r) => (
-                  <RouteCard
-                    key={r.id}
-                    route={r}
-                    selected={selected?.id === r.id}
-                    onSelect={() => selectRoute(r.id)}
-                  />
-                ))}
+            {!loading &&
+              routes.map((r) => (
+                <RouteCard
+                  key={r.id}
+                  route={r}
+                  selected={selected?.id === r.id}
+                  onSelect={() => selectRoute(r.id)}
+                />
+              ))}
           </div>
 
+          {/* routing loader lives on the map (candidates settle); the sheet
+              just speaks — one italic line, only after the 700ms grace */}
           {loading && showSkeleton && (
             <div
-              className="t-sage"
-              style={{ fontSize: 14.5, color: 'var(--ink2)', padding: '12px 20px 2px' }}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 9,
+                minHeight: 92,
+                padding: '10px 20px 2px',
+              }}
             >
-              {waitLine}
+              <Sparkle size={14} fill="var(--gold)" />
+              <span
+                className="t-sage"
+                style={{ fontSize: 15, lineHeight: 1.45, color: 'var(--ink2)' }}
+              >
+                {waitLine}
+              </span>
             </div>
           )}
 

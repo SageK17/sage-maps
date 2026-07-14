@@ -24,6 +24,35 @@ const fc = (features: GeoJSON.Feature[]): GeoJSON.FeatureCollection => ({
 })
 const EMPTY = fc([])
 
+/** An L-shaped exploratory candidate between origin and dest with a lateral jog. */
+function candidateLine(from: LngLat, to: LngLat, side: 1 | -1): LngLat[] {
+  const dx = to[0] - from[0]
+  const dy = to[1] - from[1]
+  const len = Math.hypot(dx, dy) || 1e-9
+  const nx = -dy / len
+  const ny = dx / len
+  const k = Math.max(0.002, Math.min(0.01, len * 0.22)) * side
+  const bend: LngLat = [from[0] + dx * 0.55 + nx * k, from[1] + dy * 0.55 + ny * k]
+  const pts: LngLat[] = [from, [from[0] + dx * 0.28, from[1] + dy * 0.28], bend, to]
+  const out: LngLat[] = []
+  for (let i = 0; i < pts.length - 1; i++) {
+    for (let s = 0; s < 12; s++) {
+      out.push([
+        pts[i][0] + ((pts[i + 1][0] - pts[i][0]) * s) / 12,
+        pts[i][1] + ((pts[i + 1][1] - pts[i][1]) * s) / 12,
+      ])
+    }
+  }
+  out.push(to)
+  return out
+}
+
+/** line-gradient that reveals the line up to fraction `e` (0..1), else transparent. */
+function revealExpr(color: string, e: number): unknown {
+  if (e >= 1) return ['literal', color]
+  return ['step', ['line-progress'], color, Math.max(0.0001, e), 'rgba(0,0,0,0)']
+}
+
 /* ------------------------------------------------------------------ */
 /* Marker elements — static SVG markup, colors ride on CSS vars so     */
 /* they retint automatically with the theme.                           */
@@ -98,10 +127,27 @@ function addOverlays(map: MLMap, p: MapPalette) {
     map.addSource('traffic-seg', { type: 'geojson', data: EMPTY })
     map.addSource('sel-route', { type: 'geojson', data: EMPTY, lineMetrics: true })
     map.addSource('traveled', { type: 'geojson', data: EMPTY })
+    map.addSource('search-a', { type: 'geojson', data: EMPTY, lineMetrics: true })
+    map.addSource('search-b', { type: 'geojson', data: EMPTY, lineMetrics: true })
   }
 
   const amber = p === DAY_PALETTE ? '#D2802F' : '#E09A4C'
   const layers: maplibregl.LayerSpecification[] = [
+    // routing "candidates try, the wise one settles" — grey exploratory lines
+    {
+      id: 'search-a',
+      type: 'line',
+      source: 'search-a',
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': p.altRoute, 'line-width': 6.5, 'line-opacity': 0 },
+    },
+    {
+      id: 'search-b',
+      type: 'line',
+      source: 'search-b',
+      layout: { 'line-cap': 'round', 'line-join': 'round' },
+      paint: { 'line-color': p.altRoute, 'line-width': 6.5, 'line-opacity': 0 },
+    },
     {
       id: 'alt-routes-line',
       type: 'line',
@@ -321,6 +367,9 @@ export function MapView() {
   const tab = useApp((s) => s.tab)
   const dest = useApp((s) => s.dest)
   const gasOffer = useApp((s) => s.gasOffer)
+  const routesLoading = useApp((s) => s.routesLoading)
+  const searchAnim = useRef<number | null>(null)
+  const searchStart = useRef<number | null>(null)
 
   /* ---------- routes & selection → overlay sources ---------- */
   function syncRoutes() {
@@ -449,7 +498,17 @@ export function MapView() {
         markers.current.car.remove()
         markers.current.car = null
       }
-      applyCamera(map, screen, tab, s.origin, sel)
+      if (screen === 'routes' && !sel && s.dest) {
+        // fetching: frame origin→destination so the settle animation is visible
+        const b = new maplibregl.LngLatBounds(s.origin, s.origin).extend(s.dest.pos)
+        map.fitBounds(b, {
+          duration: 850,
+          easing: easeCamera,
+          padding: { top: 130, bottom: 480, left: 56, right: 56 },
+        })
+      } else {
+        applyCamera(map, screen, tab, s.origin, sel)
+      }
     }
   }, [screen, tab, selectedRouteId, routes])
 
@@ -490,6 +549,87 @@ export function MapView() {
       }
     })
   }, [screen])
+
+  /* ---------- routing loader: candidates try, the wise one settles ---------- */
+  useEffect(() => {
+    const map = mapRef.current
+    if (!map) return
+    const active = routesLoading && screen === 'routes' && !!dest
+
+    const stop = () => {
+      if (searchAnim.current) cancelAnimationFrame(searchAnim.current)
+      searchAnim.current = null
+      searchStart.current = null
+      if (map.getLayer('search-a')) map.setPaintProperty('search-a', 'line-opacity', 0)
+      if (map.getLayer('search-b')) map.setPaintProperty('search-b', 'line-opacity', 0)
+      const ea = map.getSource('search-a') as GeoJSONSource | undefined
+      const eb = map.getSource('search-b') as GeoJSONSource | undefined
+      ea?.setData(EMPTY)
+      eb?.setData(EMPTY)
+    }
+
+    if (!active) {
+      stop()
+      return
+    }
+
+    const s = useApp.getState()
+    const to = s.dest!.pos
+    const cA = candidateLine(s.origin, to, 1)
+    const cB = candidateLine(s.origin, to, -1)
+    ;(map.getSource('search-a') as GeoJSONSource)?.setData(fc([line(cA)]))
+    ;(map.getSource('search-b') as GeoJSONSource)?.setData(fc([line(cB)]))
+    const color = (useApp.getState().theme === 'day' ? DAY_PALETTE : NIGHT_PALETTE).altRoute
+
+    // choreography mirrors the kit's sgFindA / sgFindB timeline over a 2.2s loop:
+    // candidate A draws 0–28%, fades by 40%; candidate B draws 38–68%, holds, fades.
+    const CYCLE = 2200
+    // "under 700ms, show nothing" — delay the first frame
+    const START_DELAY = 550
+    const frame = (now: number) => {
+      if (searchStart.current == null) searchStart.current = now
+      const elapsed = now - searchStart.current
+      if (elapsed < START_DELAY) {
+        searchAnim.current = requestAnimationFrame(frame)
+        return
+      }
+      const k = ((elapsed - START_DELAY) % CYCLE) / CYCLE
+      // candidate A
+      let aReveal = 0
+      let aOpacity = 0
+      if (k < 0.28) {
+        aReveal = easeDraw(k / 0.28)
+        aOpacity = 0.85
+      } else if (k < 0.4) {
+        aReveal = 1
+        aOpacity = 0.85 * (1 - (k - 0.28) / 0.12)
+      }
+      // candidate B
+      let bReveal = 0
+      let bOpacity = 0
+      if (k >= 0.38 && k < 0.68) {
+        bReveal = easeDraw((k - 0.38) / 0.3)
+        bOpacity = 0.9
+      } else if (k >= 0.68 && k < 0.9) {
+        bReveal = 1
+        bOpacity = 0.9
+      } else if (k >= 0.9) {
+        bReveal = 1
+        bOpacity = 0.9 * (1 - (k - 0.9) / 0.1)
+      }
+      if (map.getLayer('search-a')) {
+        map.setPaintProperty('search-a', 'line-gradient', revealExpr(color, aReveal) as never)
+        map.setPaintProperty('search-a', 'line-opacity', aOpacity)
+      }
+      if (map.getLayer('search-b')) {
+        map.setPaintProperty('search-b', 'line-gradient', revealExpr(color, bReveal) as never)
+        map.setPaintProperty('search-b', 'line-opacity', bOpacity)
+      }
+      searchAnim.current = requestAnimationFrame(frame)
+    }
+    searchAnim.current = requestAnimationFrame(frame)
+    return stop
+  }, [routesLoading, screen, dest])
 
   return (
     <div className="sg-map-wrap">

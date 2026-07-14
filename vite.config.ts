@@ -9,4 +9,17 @@ export default defineConfig({
     port: 5183,
     host: true,
   },
+  build: {
+    // split the heavy vendors so the shell/splash paints before the map
+    // engine parses, and so app-only changes don't bust the vendor cache
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          maplibre: ['maplibre-gl'],
+          react: ['react', 'react-dom'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 900,
+  },
 })
