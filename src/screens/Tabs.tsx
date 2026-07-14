@@ -15,7 +15,8 @@ import {
 const PICKS: { title: string; meta: string; icon: IconName }[] = [
   { title: 'Quiet cafés for deep work', meta: '4 spots · curated today', icon: 'coffee' },
   { title: 'Golden-hour lookouts', meta: '3 spots · 20 min loop', icon: 'day' },
-  { title: 'Cheapest gas this week', meta: 'Juniper Fuel · $3.89', icon: 'gas' },
+  // gas pick's price is localised at render (see ExploreSheet)
+  { title: 'Cheapest gas this week', meta: 'Juniper Fuel', icon: 'gas' },
 ]
 
 const BROWSE: { label: string; q: string; icon: IconName }[] = [
@@ -35,6 +36,10 @@ export function ExploreSheet() {
   const setQuery = useApp((s) => s.setQuery)
   const openRoutes = useApp((s) => s.openRoutes)
   const origin = useApp((s) => s.origin)
+  const fuelPrice = useApp((s) => s.fuelPrice)
+  const picks = PICKS.map((p) =>
+    p.icon === 'gas' ? { ...p, meta: `${p.meta} · ${fuelPrice}` } : p,
+  )
 
   const goSearch = (q: string) => {
     setQuery(q)
@@ -80,7 +85,7 @@ export function ExploreSheet() {
                 </span>
               </div>
               <div className="scroll-x" style={{ display: 'flex', gap: 10, padding: '0 18px 16px' }}>
-                {PICKS.map((p) => (
+                {picks.map((p) => (
                   <button key={p.title} className="sg-pick-card pressable">
                     <span className="sg-icon-tile-38">
                       <Icon name={p.icon} size={19} stroke="var(--acD)" />

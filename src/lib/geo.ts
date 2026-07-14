@@ -74,6 +74,45 @@ export function pointAlong(c: LineCursor, dist: number): PointAlong {
   return { pos, bearing: bearing(c.line[lo], c.line[lo + 1]), seg: lo }
 }
 
+export interface Projection {
+  /** distance (m) along the line of the nearest point to `p` */
+  at: number
+  /** perpendicular offset (m) from `p` to the line */
+  off: number
+}
+
+/**
+ * Nearest point on the line to `p`, in a local planar approximation (meters).
+ * Used to snap a live GPS fix onto the route and read progress along it.
+ */
+export function nearestOnLine(c: LineCursor, p: LngLat): Projection {
+  const line = c.line
+  const latRef = (p[1] * Math.PI) / 180
+  const kx = 111320 * Math.cos(latRef)
+  const ky = 110540
+  const px = p[0] * kx
+  const py = p[1] * ky
+  let best: Projection = { at: 0, off: Infinity }
+  for (let i = 0; i < line.length - 1; i++) {
+    const ax = line[i][0] * kx
+    const ay = line[i][1] * ky
+    const bx = line[i + 1][0] * kx
+    const by = line[i + 1][1] * ky
+    const dx = bx - ax
+    const dy = by - ay
+    const len2 = dx * dx + dy * dy || 1e-9
+    let t = ((px - ax) * dx + (py - ay) * dy) / len2
+    t = Math.max(0, Math.min(1, t))
+    const cx = ax + dx * t
+    const cy = ay + dy * t
+    const off = Math.hypot(px - cx, py - cy)
+    if (off < best.off) {
+      best = { at: c.cum[i] + (c.cum[i + 1] - c.cum[i]) * t, off }
+    }
+  }
+  return best
+}
+
 /** Slice of the line from 0 to `dist` meters (for the traveled overlay). */
 export function sliceUntil(c: LineCursor, dist: number): LngLat[] {
   const d = Math.max(0, Math.min(dist, c.total))

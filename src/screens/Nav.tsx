@@ -9,6 +9,7 @@ export function NavOverlay() {
   const gasOffer = useApp((s) => s.gasOffer)
   const toast = useApp((s) => s.toast)
   const sageEnabled = useApp((s) => s.sageEnabled)
+  const fuelPrice = useApp((s) => s.fuelPrice)
 
   if (!nav) return null
 
@@ -116,7 +117,7 @@ export function NavOverlay() {
               className="t-sage"
               style={{ fontSize: 15.5, lineHeight: 1.4, color: 'var(--ink)', marginBottom: 11 }}
             >
-              You're near a quarter tank. Juniper Fuel is $3.89 — forty seconds off this
+              You're near a quarter tank. Juniper Fuel is {fuelPrice} — forty seconds off this
               route.
             </div>
             <div style={{ display: 'flex', gap: 8 }}>

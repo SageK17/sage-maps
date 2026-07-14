@@ -8,6 +8,7 @@ import { RoutesOverlay } from './screens/Routes'
 import { NavOverlay, ArrivalOverlay } from './screens/Nav'
 import { ExploreSheet, SavedSheet, YouSheet } from './screens/Tabs'
 import { fetchRoutes, fallbackRoutes } from './services/routing'
+import { reverseCountry, countryFromLocale, fuelLabel } from './services/locale'
 
 // The map engine (maplibre-gl) and the CarPlay screen are the two heaviest
 // modules; splitting them keeps the initial shell + splash instant.
@@ -19,6 +20,29 @@ function useThemeAttr() {
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
   }, [theme])
+}
+
+/** Localise currency (fuel price) to the driver's country. */
+function useLocaleDetect() {
+  const origin = useApp((s) => s.origin)
+  // seed from the browser locale immediately
+  useEffect(() => {
+    useApp.getState().setFuelPrice(fuelLabel(countryFromLocale()))
+  }, [])
+  // refine from the real position once known
+  useEffect(() => {
+    let cancelled = false
+    const ctl = new AbortController()
+    reverseCountry(origin, ctl.signal)
+      .then((cc) => {
+        if (!cancelled && cc) useApp.getState().setFuelPrice(fuelLabel(cc))
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+      ctl.abort()
+    }
+  }, [origin])
 }
 
 /** Fetch routes whenever the routes screen opens (or the origin resolves). */
@@ -50,6 +74,7 @@ function useRouteFetching() {
 export default function App() {
   useThemeAttr()
   useRouteFetching()
+  useLocaleDetect()
 
   const screen = useApp((s) => s.screen)
   const tab = useApp((s) => s.tab)

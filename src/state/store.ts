@@ -55,6 +55,7 @@ interface AppState {
   gasOffer: GasOffer
   toast: string | null
   nav: NavTick | null
+  fuelPrice: string // localised to the driver's country, e.g. "€1.85/L"
 
   setTheme: (t: Theme) => void
   toggleTheme: () => void
@@ -74,6 +75,7 @@ interface AppState {
   showToast: (msg: string) => void
   clearToast: () => void
   setNav: (n: NavTick | null) => void
+  setFuelPrice: (s: string) => void
   goHome: () => void
 }
 
@@ -96,6 +98,7 @@ export const useApp = create<AppState>()(
       gasOffer: 'hidden',
       toast: null,
       nav: null,
+      fuelPrice: '$3.89/gal', // default until the driver's country is detected
 
       setTheme: (theme) => set({ theme }),
       toggleTheme: () => set((s) => ({ theme: s.theme === 'day' ? 'night' : 'day' })),
@@ -122,6 +125,7 @@ export const useApp = create<AppState>()(
       showToast: (toast) => set({ toast }),
       clearToast: () => set({ toast: null }),
       setNav: (nav) => set({ nav }),
+      setFuelPrice: (fuelPrice) => set({ fuelPrice }),
       goHome: () =>
         set({ screen: 'home', tab: 'map', nav: null, gasOffer: 'hidden', toast: null }),
     }),

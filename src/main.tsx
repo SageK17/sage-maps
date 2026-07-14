@@ -11,6 +11,10 @@ import { useApp } from './state/store'
 // apply persisted theme before first paint
 document.documentElement.setAttribute('data-theme', useApp.getState().theme)
 
+if (import.meta.env.DEV) {
+  ;(window as unknown as Record<string, unknown>).__app = useApp
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <App />

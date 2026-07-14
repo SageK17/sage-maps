@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { MONOGRAM_PATH } from '../brand/Monogram'
+import { useApp } from '../state/store'
 
 /**
  * CarPlay — Active Guidance, 1280×480 reference canvas, day + night.
@@ -272,6 +273,7 @@ function Mono({ size, stroke, dot }: { size: number; stroke: string; dot: string
 export function CarPlay() {
   const [mode, setMode] = useState<'day' | 'night'>('day')
   const [sageBanner, setSageBanner] = useState(true)
+  const fuelPrice = useApp((s) => s.fuelPrice)
   const t = mode === 'day' ? DAY : NIGHT
 
   // Sage banner: auto-dismiss after 12s (per handoff annotation)
@@ -640,7 +642,7 @@ export function CarPlay() {
                 color: t.ink,
               }}
             >
-              Gas is $3.89 at Juniper Fuel — forty seconds off route.
+              Gas is {fuelPrice} at Juniper Fuel — forty seconds off route.
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
               <button
