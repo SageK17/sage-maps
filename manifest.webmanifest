@@ -1,0 +1,19 @@
+{
+  "name": "Sage Maps",
+  "short_name": "Sage Maps",
+  "description": "The wise way there.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#1F3A2A",
+  "theme_color": "#1F3A2A",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
